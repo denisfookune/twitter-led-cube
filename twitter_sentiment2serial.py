@@ -20,37 +20,14 @@ import tweepy
 from textwrap import TextWrapper
 from calculation import *
 import serial
-
 # Needed for sleep() to test the LED cube
 import time
 
+# Global to tell the program if there is an arduino board attached to the serial port
+serial_on = 1
 # configures the serial port
-ser = serial.Serial('/dev/tty.usbmodem1421', 9600)
-
-# Keys to talk to Twitter
-f = open('secrets.txt', 'r')
-consumer_key = f.readline()
-consumer_secret = f.readline()
-
-access_token_key = f.readline()
-access_token_secret = f.readline()
-
-auth1 = tweepy.OAuthHandler(consumer_key, consumer_secret)
-auth1.set_access_token(access_token_key, access_token_secret)
-
-# New York city
-#locArea = [-74,40,-73,41]
-#setTerms = ['hello', 'goodbye', 'goodnight', 'good morning']
-#setTerms = ['hello', 'goodbye', 'goodnight', 'good morning']
-# location for Northampton/Amherst, SE to NW
-# -72.75, 42.25,   -72.4, 42.5   
-
-# Northampton/Amherst, MA
-#locArea = [-72.75,42.25,-72.4, 42.5]
-#setTerms = ['amherst']
-
-# Ann Arbor/ Detroit area
-locArea = [-83.93, 42.01, -83.17, 42.34]
+if serial_on:
+    ser = serial.Serial('/dev/tty.usbmodem1421', 9600)
 
 
 # Translates the measurements into cube coordinates
@@ -123,10 +100,11 @@ class StreamListener(tweepy.StreamListener):
             print "Raw Tweet:", tweetText
             curSentiment = getAnewSentiment(tweetText)
             if curSentiment != None:
-                # Gets the coordinates for the LED cube
-                a = getLEDCoordinates(curSentiment['valence'], curSentiment['arousal'], curSentiment['dominance'])
-                serStr = '%i%i%i' % (a[0], a[1], a[2])
-                ser.write(serStr)
+                if serial_on:
+                    # Gets the coordinates for the LED cube
+                    a = getLEDCoordinates(curSentiment['valence'], curSentiment['arousal'], curSentiment['dominance'])
+                    serStr = '%i%i%i' % (a[0], a[1], a[2])
+                    ser.write(serStr)
                 # prints stuff for fun
                 print "==> Tweet:", tweetText
                 print "Sentiment:",curSentiment
@@ -137,12 +115,58 @@ class StreamListener(tweepy.StreamListener):
             # and just ignore them to avoid breaking application.
             pass
 
-# The first thing we do is to test the LED cube
-testLEDcube()
 
-# We then open a listener
-l = StreamListener()
-streamer = tweepy.Stream(auth=auth1, listener=l)
+def main():
+    # Keys to talk to Twitter
+    # Removes extra \n at the end of each line read from the secrets.txt file
+    f = open('secrets.txt', 'r')
+    consumer_key = f.readline().strip()
+    consumer_secret = f.readline().strip()
 
-#streamer.filter(track = setTerms, locations = locArea)
-streamer.filter(locations = locArea)
+    access_token_key = f.readline().strip()
+    access_token_secret = f.readline().strip()
+    f.close()
+
+    try:
+        auth1 = tweepy.OAuthHandler(consumer_key, consumer_secret)
+        auth1.set_access_token(access_token_key, access_token_secret)
+    except:
+        print "Authentication error."
+
+    # New York city
+    #locArea = [-74,40,-73,41]
+    #setTerms = ['hello', 'goodbye', 'goodnight', 'good morning']
+    #setTerms = ['hello', 'goodbye', 'goodnight', 'good morning']
+    # location for Northampton/Amherst, SE to NW
+    # -72.75, 42.25,   -72.4, 42.5   
+
+    # Northampton/Amherst, MA
+    #locArea = [-72.75,42.25,-72.4, 42.5]
+    #setTerms = ['amherst']
+
+    # Ann Arbor/ Detroit area
+    locArea = [-83.93, 42.01, -83.17, 42.34]
+
+
+    # The first thing we do is to test the LED cube
+    if serial_on:
+        testLEDcube()
+
+    l = StreamListener()
+    try:
+        streamer = tweepy.Stream(auth=auth1, listener=l)
+    except:
+        print "error authenticating"
+
+    # This doesn't work to catch authentication problem
+    # Reading the code on tweepy, it should.  File a bug report.
+    # The filter() function runs a loop, unless asyn=TRUE is passed as argument.
+    try:
+        #streamer.filter(track = setTerms)#, locations = locArea)
+        streamer.filter(locations = locArea)
+        #streamer.firehose()
+    except:
+        print "error setting query."
+
+if __name__ == '__main__':
+    main()
